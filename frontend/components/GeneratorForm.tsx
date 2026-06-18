@@ -118,6 +118,7 @@ export default function GeneratorForm() {
       formData.append("price", price);
       formData.append("offer", offer);
       formData.append("cta_text", "Order Now");
+      formData.append("category", category);
 
       const response = await fetch(`${API_URL}/generate-poster`, {
         method: "POST",

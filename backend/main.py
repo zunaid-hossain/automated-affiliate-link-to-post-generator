@@ -90,6 +90,7 @@ async def poster(
     price: str = Form(""),
     offer: str = Form(""),
     cta_text: str = Form("Order Now"),
+    category: str = Form(""),
 ) -> dict[str, str]:
     image_bytes = b""
     if product_image:
@@ -114,6 +115,7 @@ async def poster(
             price=price,
             offer=offer,
             cta_text=cta_text,
+            category=category,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Could not generate poster") from exc
