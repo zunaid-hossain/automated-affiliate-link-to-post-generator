@@ -1,8 +1,17 @@
 # Affiliate Post Maker
 
-Lightweight full-stack app for generating Facebook affiliate captions, hashtags, keywords, and 1080x1080 product posters.
+Lightweight full-stack app for generating Facebook affiliate captions, hashtags, keywords, and 1080x1080 product posters. Paste a product or affiliate link, fetch product details from the page, then generate captions and a clean poster from the best detected product image.
 
 No database is used. No user history is stored. The backend only stores final generated poster images temporarily in `backend/outputs` and deletes images older than 24 hours.
+
+## Features
+
+- Scrapes product title, description, price, category, and best image from the pasted link.
+- Uses Open Graph, Twitter cards, JSON-LD product data, and page images where available.
+- Lets the user upload their own image or use the detected product image.
+- Generates Bangla, English, or Bangla-English affiliate captions.
+- Generates a 1080x1080 PNG poster without watermark, AI logo, or Gemini logo.
+- Keeps the original product image unchanged inside the poster design.
 
 ## Project Structure
 
@@ -13,6 +22,7 @@ affiliate-post-maker/
     requirements.txt
     poster_generator.py
     gemini_service.py
+    scraper_service.py
     outputs/
   frontend/
     app/
@@ -49,6 +59,13 @@ Run:
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+Backend endpoints:
+
+- `POST /scrape-product`
+- `POST /generate-caption`
+- `POST /generate-poster`
+- `GET /outputs/{filename}`
 
 ## Local Frontend Setup
 

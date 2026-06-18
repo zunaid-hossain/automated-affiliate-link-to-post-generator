@@ -2,9 +2,9 @@ __pycache__/
 *.pyc
 .env
 .env.local
-outputs/*.png
-outputs/*.jpg
-outputs/*.jpeg
+backend/outputs/*.png
+backend/outputs/*.jpg
+backend/outputs/*.jpeg
 node_modules/
 .next/
 dist/

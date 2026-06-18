@@ -22,6 +22,7 @@ def _fallback_caption(
     offer: str,
     tone: str,
     language: str,
+    category: str = "",
 ) -> dict[str, Any]:
     title = product_title or "এই দারুণ প্রোডাক্ট"
     price_line = f"মূল্য: {price}" if price else "মূল্য জানতে ইনবক্স করুন"
@@ -46,6 +47,7 @@ def _fallback_caption(
         "hashtags": ["#AffiliateFinds", "#OnlineShopping", "#Bangladesh", "#ShopNow"],
         "facebook_keywords": [
             title,
+            category,
             tone,
             language,
             "online shopping",
@@ -73,6 +75,7 @@ def generate_caption(
     offer: str = "",
     tone: str = "Friendly",
     language: str = "Bangla",
+    category: str = "",
 ) -> dict[str, Any]:
     try:
         _configure_gemini()
@@ -95,6 +98,7 @@ Product details:
 - product_title: {product_title or "Not provided"}
 - price: {price or "Not provided"}
 - offer: {offer or "Not provided"}
+- category: {category or "Not provided"}
 - tone: {tone}
 - language: {language}
 
@@ -116,4 +120,4 @@ Rules:
             data.setdefault(key, [] if key in {"benefits", "hashtags", "facebook_keywords"} else "")
         return data
     except Exception:
-        return _fallback_caption(affiliate_url, product_title, price, offer, tone, language)
+        return _fallback_caption(affiliate_url, product_title, price, offer, tone, language, category)

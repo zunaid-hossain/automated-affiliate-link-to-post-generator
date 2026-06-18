@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
+import requests
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +11,7 @@ from pydantic import BaseModel, HttpUrl
 
 from gemini_service import generate_caption
 from poster_generator import OUTPUT_DIR, generate_poster
+from scraper_service import scrape_product
 
 
 load_dotenv()
@@ -35,8 +37,13 @@ class CaptionRequest(BaseModel):
     product_title: str = ""
     price: str = ""
     offer: str = ""
+    category: str = ""
     tone: str = "Friendly"
     language: str = "Bangla"
+
+
+class ScrapeRequest(BaseModel):
+    affiliate_url: HttpUrl
 
 
 @app.on_event("startup")
@@ -63,23 +70,42 @@ def caption(payload: CaptionRequest) -> dict:
         offer=payload.offer,
         tone=payload.tone,
         language=payload.language,
+        category=payload.category,
     )
+
+
+@app.post("/scrape-product")
+def scrape(payload: ScrapeRequest) -> dict[str, str]:
+    try:
+        return scrape_product(str(payload.affiliate_url))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/generate-poster")
 async def poster(
-    product_image: UploadFile = File(...),
+    product_image: UploadFile | None = File(None),
+    product_image_url: str = Form(""),
     product_title: str = Form(""),
     price: str = Form(""),
     offer: str = Form(""),
     cta_text: str = Form("Order Now"),
 ) -> dict[str, str]:
-    if product_image.content_type not in {"image/png", "image/jpeg", "image/webp"}:
-        raise HTTPException(status_code=400, detail="Upload PNG, JPG, JPEG, or WEBP image")
+    image_bytes = b""
+    if product_image:
+        if product_image.content_type not in {"image/png", "image/jpeg", "image/webp"}:
+            raise HTTPException(status_code=400, detail="Upload PNG, JPG, JPEG, or WEBP image")
+        image_bytes = await product_image.read()
+    elif product_image_url:
+        try:
+            image_response = requests.get(product_image_url, timeout=15)
+            image_response.raise_for_status()
+            image_bytes = image_response.content
+        except requests.RequestException as exc:
+            raise HTTPException(status_code=400, detail="Could not download product image") from exc
 
-    image_bytes = await product_image.read()
     if not image_bytes:
-        raise HTTPException(status_code=400, detail="Image file is empty")
+        raise HTTPException(status_code=400, detail="Upload an image or fetch one from the product link")
 
     try:
         filename = generate_poster(
