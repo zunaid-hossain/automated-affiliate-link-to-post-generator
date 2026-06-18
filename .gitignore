@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+.env.local
+outputs/*.png
+outputs/*.jpg
+outputs/*.jpeg
+node_modules/
+.next/
+dist/
+build/
+.DS_Store
