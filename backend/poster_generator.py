@@ -1,4 +1,5 @@
 import colorsys
+import math
 from pathlib import Path
 from uuid import uuid4
 
@@ -172,6 +173,66 @@ def _alpha_shadow(image: Image.Image, offset: tuple[int, int], blur: int, opacit
     return layer
 
 
+def _category_palette(product: Image.Image, product_title: str, category: str = "") -> dict[str, RGB]:
+    text = f"{product_title} {category}".lower()
+    if any(word in text for word in ["food", "burger", "ketchup", "tomato", "chicken", "snack", "drink", "pizza"]):
+        return {"top": (156, 9, 14), "bottom": (239, 34, 24), "paint": (255, 207, 51), "accent": (255, 225, 74), "dark": (39, 8, 9)}
+    if any(word in text for word in ["shoe", "sneaker", "trainer", "footwear", "nike", "adidas"]):
+        return {"top": (11, 28, 32), "bottom": (12, 148, 136), "paint": (166, 230, 35), "accent": (217, 70, 239), "dark": (7, 12, 20)}
+    if any(word in text for word in ["beauty", "makeup", "skin", "cream", "serum", "perfume", "cosmetic"]):
+        return {"top": (118, 18, 76), "bottom": (236, 72, 153), "paint": (255, 205, 87), "accent": (255, 182, 193), "dark": (40, 10, 30)}
+    if any(word in text for word in ["fashion", "shirt", "dress", "watch", "bag", "clothing", "style", "wear"]):
+        return {"top": (14, 78, 62), "bottom": (22, 163, 74), "paint": (255, 207, 36), "accent": (255, 255, 255), "dark": (11, 41, 31)}
+
+    dominant = _dominant_color(product)
+    top = _mix(_saturate(dominant, 1.15, -0.04), (0, 95, 122), 0.72)
+    bottom = _mix(_saturate(dominant, 1.35, 0.08), (8, 178, 206), 0.62)
+    return {"top": top, "bottom": bottom, "paint": (255, 190, 24), "accent": (255, 226, 68), "dark": _mix(top, (0, 0, 0), 0.55)}
+
+
+def _draw_reference_background(canvas: Image.Image, palette: dict[str, RGB]) -> None:
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    top = palette["top"]
+    bottom = palette["bottom"]
+    center = (CANVAS_SIZE // 2, 624)
+
+    for y in range(CANVAS_SIZE):
+        ratio = y / CANVAS_SIZE
+        color = _mix(top, bottom, ratio)
+        draw.line((0, y, CANVAS_SIZE, y), fill=_rgba(color, 255))
+
+    for angle in range(-30, 211, 14):
+        length = 1500
+        x = center[0] + int(length * math.cos(math.radians(angle)))
+        y = center[1] + int(length * math.sin(math.radians(angle)))
+        draw.polygon([center, (x - 18, y - 18), (x + 18, y + 18)], fill=(255, 255, 255, 13))
+
+    for angle in range(220, 520, 18):
+        length = 1500
+        x = center[0] + int(length * math.cos(math.radians(angle)))
+        y = center[1] + int(length * math.sin(math.radians(angle)))
+        draw.line((center[0], center[1], x, y), fill=(255, 255, 255, 12), width=2)
+
+    draw.rectangle((0, 0, CANVAS_SIZE, CANVAS_SIZE), outline=_rgba(_mix(top, (0, 0, 0), 0.35), 255), width=16)
+    draw.polygon([(0, 700), (260, 626), (660, 725), (1080, 616), (1080, 1080), (0, 1080)], fill=_rgba(palette["paint"], 255))
+    draw.polygon([(0, 676), (190, 628), (330, 670), (0, 764)], fill=_rgba(_mix(palette["dark"], (0, 0, 0), 0.1), 245))
+    draw.polygon([(0, 810), (374, 718), (600, 748), (0, 908)], fill=_rgba(_mix(palette["dark"], (0, 0, 0), 0.12), 235))
+    draw.polygon([(760, 634), (1080, 538), (1080, 640), (825, 700)], fill=_rgba(palette["paint"], 255))
+    draw.polygon([(824, 666), (1080, 606), (1080, 664), (884, 716)], fill=_rgba(_mix(palette["dark"], (0, 0, 0), 0.05), 220))
+
+    for box in [(90, 390, 150, 450), (806, 264, 852, 310), (845, 286, 904, 345)]:
+        draw.ellipse(box, outline=(255, 255, 255, 92), width=3)
+
+    for x in [850, 900, 950]:
+        draw.ellipse((x, 116, x + 24, 140), outline=(255, 255, 255, 235), width=7)
+
+
+def _draw_centered_text(draw: ImageDraw.ImageDraw, y: int, text: str, font: ImageFont.ImageFont, fill: str, stroke_fill: str | None = None, stroke_width: int = 0) -> int:
+    width, height = _text_size(draw, text, font)
+    draw.text(((CANVAS_SIZE - width) / 2, y), text, font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill or fill)
+    return y + height
+
+
 def generate_poster(
     image_bytes: bytes,
     product_title: str = "",
@@ -186,87 +247,69 @@ def generate_poster(
     price = _poster_text(price)
     offer = _poster_text(offer)
     cta = _poster_text(cta_text) or "Order Now"
-    palette = _palette(product, title, category)
+    palette = _category_palette(product, title, category)
     dark = palette["dark"]
-    panel = palette["panel"]
-    accent = palette["accent"]
-    accent2 = palette["accent2"]
-    text_dark = _mix(dark, (0, 0, 0), 0.2)
+    paint = palette["paint"]
 
-    base = Image.new("RGBA", product.size, "#f7f7f7")
-    base.alpha_composite(product)
-    bg = ImageOps.fit(base.convert("RGB"), (CANVAS_SIZE, CANVAS_SIZE)).convert("RGBA")
-    bg = bg.filter(ImageFilter.GaussianBlur(30))
-    canvas = Image.new("RGBA", (CANVAS_SIZE, CANVAS_SIZE), _hex(dark))
-    canvas.alpha_composite(bg)
-
+    canvas = Image.new("RGBA", (CANVAS_SIZE, CANVAS_SIZE), _hex(palette["top"]))
+    _draw_reference_background(canvas, palette)
     draw = ImageDraw.Draw(canvas, "RGBA")
-    draw.rectangle((0, 0, CANVAS_SIZE, CANVAS_SIZE), fill=_rgba(dark, 182))
-    draw.polygon([(0, 0), (650, 0), (470, 1080), (0, 1080)], fill=_rgba(_mix(dark, (0, 0, 0), 0.28), 218))
-    draw.polygon([(705, 0), (1080, 0), (1080, 1080), (870, 1080)], fill=_rgba(panel, 192))
-    draw.polygon([(0, 820), (1080, 660), (1080, 1080), (0, 1080)], fill=(255, 255, 255, 24))
 
-    for x in range(44, 528, 38):
-        for y in range(96, 370, 38):
-            draw.ellipse((x, y, x + 4, y + 4), fill=(255, 255, 255, 72))
-    for y in range(430, 760, 44):
-        draw.line((62, y, 402, y - 44), fill=_rgba(accent, 56), width=3)
+    draw.text((88, 118), "DEAL", font=_font(28, bold=True), fill=(255, 255, 255, 230))
+    script_font = _font(48, bold=False)
+    _draw_centered_text(draw, 154, "The Best", script_font, "#ffffff")
 
-    draw.line((62, 76, 390, 76), fill=_rgba(accent, 255), width=6)
-    draw.text((64, 100), "FEATURED DEAL", font=_font(28, bold=True), fill=_rgba(accent, 255))
-
-    title_font = _fit_font(draw, title.upper(), 470, 76, 42)
-    title_lines = _fit_text(draw, title.upper(), title_font, 470, 3)
-    title_y = 158
+    hero_font = _fit_font(draw, title.upper(), 740, 118, 70)
+    title_lines = _fit_text(draw, title.upper(), hero_font, 740, 2)
+    headline_y = 216
+    if len(title_lines) > 1:
+        hero_font = _fit_font(draw, title.upper(), 800, 94, 62)
     for line in title_lines:
-        _draw_text_with_shadow(draw, (62, title_y), line, title_font, "#ffffff", _hex(text_dark), 3)
-        title_y += _text_size(draw, line, title_font)[1] + 12
+        headline_y = _draw_centered_text(draw, headline_y, line, hero_font, "#ffffff", _hex(dark), 2) + 2
 
-    sub_font = _font(25, bold=True)
-    draw.line((64, title_y + 30, 362, title_y + 30), fill=_rgba(accent, 230), width=4)
-    draw.text((64, title_y + 44), "LIMITED TIME OFFER", font=sub_font, fill=(255, 255, 255, 230))
+    subline = f"FOR YOUR {category.upper()}" if category else "FOR YOUR SHOPPING"
+    sub_font = _fit_font(draw, subline, 420, 34, 22)
+    _draw_centered_text(draw, headline_y + 10, subline, sub_font, "#ffffff")
 
-    max_product_box = (610, 680)
+    discount_text = offer.upper() if offer else "SPECIAL DEAL"
+    discount_font = _fit_font(draw, discount_text, 260, 34, 23)
+    discount_y = headline_y + 74
+    discount_w, discount_h = _text_size(draw, discount_text, discount_font)
+    draw.ellipse((CANVAS_SIZE / 2 - 118, discount_y - 20, CANVAS_SIZE / 2 + 118, discount_y + 86), fill=(255, 255, 255, 24), outline=(255, 255, 255, 130), width=3)
+    draw.text(((CANVAS_SIZE - discount_w) / 2, discount_y + (52 - discount_h) / 2), discount_text, font=discount_font, fill="#ffffff", stroke_width=2, stroke_fill=_hex(dark))
+
+    max_product_box = (660, 450)
     display = ImageOps.contain(product, max_product_box)
-    product_x = 436 + max(0, (590 - display.width) // 2)
-    product_y = 252 + max(0, (632 - display.height) // 2)
+    product_x = (CANVAS_SIZE - display.width) // 2
+    product_y = 594 + max(0, (260 - display.height) // 2)
 
-    halo = Image.new("RGBA", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0, 0))
-    halo_draw = ImageDraw.Draw(halo, "RGBA")
-    halo_draw.ellipse((374, 210, 1054, 900), fill=(255, 255, 255, 68))
-    halo_draw.ellipse((432, 268, 1000, 846), outline=_rgba(accent, 155), width=8)
-    halo = halo.filter(ImageFilter.GaussianBlur(10))
-    canvas.alpha_composite(halo)
-    canvas.alpha_composite(_alpha_shadow(display, (product_x + 26, product_y + 36), 28, 185))
+    ellipse_layer = Image.new("RGBA", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0, 0))
+    ellipse_draw = ImageDraw.Draw(ellipse_layer, "RGBA")
+    ellipse_draw.ellipse((260, 742, 820, 885), fill=(0, 0, 0, 90))
+    ellipse_layer = ellipse_layer.filter(ImageFilter.GaussianBlur(24))
+    canvas.alpha_composite(ellipse_layer)
+    canvas.alpha_composite(_alpha_shadow(display, (product_x + 20, product_y + 26), 22, 170))
     canvas.alpha_composite(display, (product_x, product_y))
 
     draw = ImageDraw.Draw(canvas, "RGBA")
-    draw.rounded_rectangle((52, 828, 548, 1012), radius=16, fill=(255, 255, 255, 238))
-    draw.rectangle((52, 828, 84, 1012), fill=_rgba(accent, 255))
-    draw.line((100, 874, 500, 874), fill=_rgba(dark, 38), width=2)
 
     if price:
-        draw.text((110, 858), "TODAY PRICE", font=_font(24, bold=True), fill=_rgba(_mix(accent, dark, 0.25), 255))
-        price_font = _fit_font(draw, price, 380, 68, 42)
-        draw.text((108, 902), price, font=price_font, fill=_rgba(accent2, 255), stroke_width=2, stroke_fill=_rgba(text_dark, 255))
+        price_font = _fit_font(draw, price, 220, 42, 28)
+        price_w, price_h = _text_size(draw, price, price_font)
+        draw.ellipse((774, 548, 930, 704), fill=_rgba(paint, 255))
+        draw.ellipse((784, 558, 920, 694), outline=_rgba(dark, 170), width=3)
+        draw.text((852 - price_w / 2, 586), price, font=price_font, fill=_hex(dark), stroke_width=1, stroke_fill="#ffffff")
+        draw.text((820, 634), "PRICE", font=_font(22, bold=True), fill=_hex(dark))
 
-    badge_text = (offer or "HOT DEAL").upper()[:24]
-    badge_font = _fit_font(draw, badge_text, 270, 35, 24)
-    badge_w, badge_h = _text_size(draw, badge_text, badge_font)
-    draw.polygon([(728, 82), (1012, 112), (982, 226), (694, 194)], fill=_rgba(accent2, 250))
-    draw.line([(728, 82), (1012, 112), (982, 226), (694, 194), (728, 82)], fill=(255, 255, 255, 230), width=4)
-    badge_fill = "#ffffff" if _relative_luminance(accent2) < 0.58 else _hex(text_dark)
-    draw.text((724 + (250 - badge_w) / 2, 124 + (54 - badge_h) / 2), badge_text, font=badge_font, fill=badge_fill, stroke_width=2, stroke_fill=_hex(text_dark))
+    draw.rectangle((0, 940, CANVAS_SIZE, 1034), fill=(38, 31, 20, 126))
+    draw.ellipse((98, 970, 150, 1022), fill="#ffffff")
+    draw.text((174, 964), "ORDER FROM LINK", font=_font(26, bold=True), fill="#ffffff")
+    draw.text((174, 996), "CHECK CAPTION FOR DETAILS", font=_font(24, bold=True), fill="#ffffff")
 
-    cta_font = _fit_font(draw, cta.upper(), 300, 40, 28)
+    cta_font = _fit_font(draw, cta.upper(), 210, 24, 18)
     cta_w, cta_h = _text_size(draw, cta.upper(), cta_font)
-    draw.rounded_rectangle((660, 908, 1014, 988), radius=40, fill=_rgba(accent2, 255))
-    draw.rounded_rectangle((672, 920, 1002, 976), radius=28, outline=(255, 255, 255, 230), width=3)
-    cta_fill = "#ffffff" if _relative_luminance(accent2) < 0.58 else _hex(text_dark)
-    draw.text((660 + (354 - cta_w) / 2, 930 + (36 - cta_h) / 2), cta.upper(), font=cta_font, fill=cta_fill)
-
-    draw.rounded_rectangle((642, 826, 990, 874), radius=24, fill=_rgba(_mix(dark, (0, 0, 0), 0.2), 188))
-    draw.text((668, 838), "FAST ORDER VIA LINK", font=_font(24, bold=True), fill=(255, 255, 255, 230))
+    draw.rounded_rectangle((748, 978, 934, 1018), radius=4, fill=(255, 255, 255, 245))
+    draw.text((841 - cta_w / 2, 989 + (18 - cta_h) / 2), cta.upper(), font=cta_font, fill=_hex(dark))
 
     output_name = f"poster-{uuid4().hex}.png"
     output_path = OUTPUT_DIR / output_name
